@@ -1,0 +1,6 @@
+[
+  {"title": "Introduction to Python", "instructor": "Dr. Smith", "duration": "6 weeks", "enrolled": 1250, "rating": 4.8},
+  {"title": "Web Development Bootcamp", "instructor": "Prof. Johnson", "duration": "12 weeks", "enrolled": 2100, "rating": 4.9},
+  {"title": "Data Science Fundamentals", "instructor": "Dr. Lee", "duration": "8 weeks", "enrolled": 1850, "rating": 4.7},
+  {"title": "Machine Learning A-Z", "instructor": "Prof. Brown", "duration": "10 weeks", "enrolled": 3200, "rating": 4.9}
+]

@@ -8,14 +8,37 @@ Supports: Anthropic Claude, OpenAI GPT, Ollama (local), Groq
 from typing import Optional, Dict, Any, List
 import logging
 import json
-import httpx
-from anthropic import AsyncAnthropic
-from openai import AsyncOpenAI
+import os
 
-from app.config import settings
-from app.core.exceptions import ContentGenerationError
+# NOTE (wave-1 fix, 2026-09-24): the original imports below referenced
+# nonexistent modules (`app.config`, `app.core.exceptions`) and hard-required
+# third-party SDKs at import time. They are replaced with a local env-backed
+# settings object, a local exception class, and lazy provider-SDK imports so
+# this module imports cleanly without any provider package installed.
+# A provider SDK is only required when you actually instantiate that provider.
 
 logger = logging.getLogger(__name__)
+
+
+class ContentGenerationError(Exception):
+    """Raised when the LLM provider fails to generate content."""
+
+
+class _Settings:
+    """Minimal env-backed settings (stand-in for the missing app.config)."""
+    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+    ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+    GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-70b-versatile")
+    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1")
+    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+
+
+settings = _Settings()
 
 
 class LLMClient:
@@ -30,29 +53,41 @@ class LLMClient:
         if self.provider == "anthropic":
             if not settings.ANTHROPIC_API_KEY:
                 raise ValueError("ANTHROPIC_API_KEY not set")
+            try:
+                from anthropic import AsyncAnthropic
+            except ImportError:
+                raise ImportError("The 'anthropic' package is required for the anthropic provider; pip install anthropic")
             self.client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
             self.model = settings.ANTHROPIC_MODEL
-            
+
         elif self.provider == "openai":
             if not settings.OPENAI_API_KEY:
                 raise ValueError("OPENAI_API_KEY not set")
+            try:
+                from openai import AsyncOpenAI
+            except ImportError:
+                raise ImportError("The 'openai' package is required for the openai provider; pip install openai")
             self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
             self.model = settings.OPENAI_MODEL
-            
+
         elif self.provider == "groq":
             if not settings.GROQ_API_KEY:
                 raise ValueError("GROQ_API_KEY not set")
+            try:
+                from openai import AsyncOpenAI
+            except ImportError:
+                raise ImportError("The 'openai' package is required for the groq provider; pip install openai")
             self.client = AsyncOpenAI(
                 api_key=settings.GROQ_API_KEY,
                 base_url="https://api.groq.com/openai/v1"
             )
             self.model = settings.GROQ_MODEL
-            
+
         elif self.provider == "ollama":
             self.base_url = settings.OLLAMA_BASE_URL
             self.model = settings.OLLAMA_MODEL
-            self.client = None  # Use httpx for Ollama
-        
+            self.client = None  # Uses httpx lazily in _generate_ollama
+
         else:
             raise ValueError(f"Unsupported LLM provider: {self.provider}")
     
@@ -193,6 +228,7 @@ class LLMClient:
         if system_prompt:
             payload["system"] = system_prompt
         
+        import httpx  # lazy: only needed for the ollama provider
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(url, json=payload)
             response.raise_for_status()
@@ -304,6 +340,7 @@ class LLMClient:
             
             elif self.provider == "ollama":
                 url = f"{self.base_url}/api/embeddings"
+                import httpx  # lazy: only needed for embeddings via HTTP
                 async with httpx.AsyncClient() as client:
                     response = await client.post(
                         url,

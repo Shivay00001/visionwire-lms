@@ -48,3 +48,22 @@ Contributions, issues, and feature requests are welcome! Feel free to check the 
 ## 📝 License
 
 This project is licensed under standard terms.
+
+---
+
+## 🔧 Wave-1 fix notes (2026-09-24)
+
+- **Fixed imports:** `backend/services/llm_client.py` imported nonexistent `app.config`
+  and `app.core.exceptions` modules and hard-required provider SDKs at import time.
+  It now uses a local env-backed settings object, a local `ContentGenerationError`,
+  and lazy provider-SDK imports — it imports cleanly with zero provider packages
+  installed (a SDK is only needed when you instantiate that provider; without an API
+  key it raises a clear error).
+- **Real course CRUD:** `backend/main.py` no longer serves a hardcoded course list.
+  Courses live in SQLite (`backend/lms.db`, stdlib only), seeded once from
+  `backend/data/courses_seed.json`. Endpoints: `GET /courses`, `POST /courses`,
+  `GET/PUT/DELETE /courses/{id}`, `GET /stats`, `GET /health`.
+- Verified 2026-09-24: uvicorn booted on :8007; full CRUD round-trip via curl
+  (create id=5 → update rating → get → delete → 404 on missing id; stats correct).
+  Backend requirements: `fastapi`, `uvicorn`, `pydantic` (see `backend/requirements.txt`).
+  Run: `cd backend && uvicorn main:app --host 0.0.0.0 --port 8007`.
